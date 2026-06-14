@@ -1,0 +1,22 @@
+User-agent: *
+Allow: /
+
+# AI Agents Welcome
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: CCBot
+Allow: /
+User-agent: anthropic-ai
+Allow: /
+User-agent: PerplexityBot
+Allow: /
+
+# Note: Replace "username.github.io" with your actual GitHub username after deployment.
+Sitemap: https://username.github.io/sitemap.xml
