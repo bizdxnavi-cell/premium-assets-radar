@@ -1,4 +1,3 @@
-
 const scriptProperties = PropertiesService.getScriptProperties();
 
 const LEDGER_SHEET_NAME = 'Target_Ledger'; // 発掘キーワードの管理台帳
@@ -119,11 +118,20 @@ function runResearchEngine() {
   const colKeyword = headers.indexOf('Search_Keyword');
   const colStatus = headers.indexOf('Status');
   const colLastSearched = headers.indexOf('Last_Searched');
+  
+  // 今日の日付を「yyyy/MM/dd」形式で取得（渋滞解消のための比較用）
+  const todayStr = Utilities.formatDate(new Date(), "GMT+9", "yyyy/MM/dd"); 
+
   for (let i = 1; i < data.length; i++) {
     let status = data[i][colStatus];
     let keyword = data[i][colKeyword];
+    let lastSearched = data[i][colLastSearched];
 
-    if (status === 'ACTIVE') {
+    // 日付が入力されている場合は文字列にフォーマット（空欄の場合は空文字にする）
+    let lastSearchedStr = lastSearched ? Utilities.formatDate(new Date(lastSearched), "GMT+9", "yyyy/MM/dd") : "";
+
+    // 【渋滞解消ロジック】ステータスがACTIVE かつ、今日まだ検索されていないキーワードのみ処理する
+    if (status === 'ACTIVE' && lastSearchedStr !== todayStr) {
       Logger.log(`[Target Lock] 検索開始: ${keyword}`);
       let rawItems = searchEbayBrowseAPI(keyword, ebayToken);
       
@@ -135,7 +143,9 @@ function runResearchEngine() {
             const targetItem = safeItems[0];
             const rawItemId = targetItem.itemId.split('|')[1] || targetItem.itemId;
             const priceUsd = targetItem.price ? parseFloat(targetItem.price.value) : 0;
-            const itemUrl = `https://www.ebay.com/itm/${rawItemId}?mkcid=1&mkrid=711-53200-19255-0&siteid=0&campid=${EBAY_CAMPAIGN_ID}&toolid=10001&mkevt=1`;
+            
+            // 【ステルス化】自社ハブサイトへ商品ID(item)とキャンペーンID(c)をパラメータとして渡す（実際のURLを適用）
+            const itemUrl = `https://bizdxnavi-cell.github.io/premium-assets-radar/?item=${rawItemId}&c=${EBAY_CAMPAIGN_ID}`;
             
             // AI向けの事実ベース英語要約を生成
             let aiSummary = generateAISummary(targetItem, keyword);
@@ -152,14 +162,15 @@ function runResearchEngine() {
                 keyword,          // A列: Asset_Keyword
                 rawItemId,        // B列: eBay_Item_ID
                 targetItem.title, // C列: Item_Title
-    
                 priceUsd,         // D列: Price_USD
                 itemUrl,          // E列: Affiliate_URL
                 aiSummary,        // F列: AI_Summary
                 currentTimeStr    // G列: Last_Updated
               ]);
               
-              ledgerSheet.getRange(i + 1, colStatus + 1).setValue('COMPLETED');
+              const rowToUpdate = i + 1; // GASの行番号は1始まり
+              const statusColNumber = colStatus + 1; // GASの列番号は1始まり
+              ledgerSheet.getRange(rowToUpdate, statusColNumber).setValue('COMPLETED');
               Logger.log(`[Ledger] ${keyword} のステータスを COMPLETED に更新しました。`);
             }
           } else {
@@ -172,7 +183,13 @@ function runResearchEngine() {
         Logger.log(`[Silent] 該当商品なし。`);
       }
 
-      ledgerSheet.getRange(i + 1, colLastSearched + 1).setValue(new Date());
+      const rowToUpdate = i + 1; // GASの行番号は1始まり
+      const lastSearchedColNumber = colLastSearched + 1; // GASの列番号は1始まり
+      // 日付を yyyy/MM/dd にフォーマットして入力することで列のズレを防ぐ
+      ledgerSheet.getRange(rowToUpdate, lastSearchedColNumber).setValue(todayStr);
+      
+      // 1回の実行で1件のみ処理するためループを抜ける（タイムアウト防止）
+      break; 
     }
   }
 }
